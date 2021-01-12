@@ -1,3 +1,8 @@
+## Note for ICON Repo
+
+You have to download 2020-01-11-skylion-stylegan2-animeportraits-networksnapshot-024664.pkl from https://www.gwern.net/Faces#stylegan-2
+
+
 ## StyleGAN2 &mdash; Pytorch Implementation
 ### About
 This is an unofficial port of the StyleGAN2 architecture and training procedure from [the official Tensorflow implementation](https://github.com/NVlabs/stylegan2) to Pytorch. Pretrained Tensorflow models can be converted into Pytorch models.

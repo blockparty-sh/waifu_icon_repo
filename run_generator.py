@@ -1,3 +1,5 @@
+from flask import Flask, send_file
+import re
 import warnings
 import argparse
 import os
@@ -269,6 +271,8 @@ def style_mixing_example(G, args):
 #----------------------------------------------------------------------------
 
 def generate_images(G, args):
+    args.seeds = [ int('0x%s' % args.tokenid, 16) % ((1 << 31) - 1) ]
+    print('generating ', args.tokenid, args.seeds[0])
     latent_size, label_size = G.latent_size, G.label_size
     device = torch.device(args.gpu[0] if args.gpu else 'cpu')
     if device.index is not None:
@@ -314,9 +318,6 @@ def generate_images(G, args):
             noise_tensors = None
         return latents, labels, noise_tensors
 
-    progress = utils.ProgressWriter(len(args.seeds))
-    progress.write('Generating images...', step=False)
-
     for i in range(0, len(args.seeds), args.batch_size):
         latents, labels, noise_tensors = get_batch(args.seeds[i: i + args.batch_size])
         if noise_tensors is not None:
@@ -326,22 +327,46 @@ def generate_images(G, args):
         images = utils.tensor_to_PIL(
             generated, pixel_min=args.pixel_min, pixel_max=args.pixel_max)
         for seed, img in zip(args.seeds[i: i + args.batch_size], images):
-            img.save(os.path.join(args.output, 'seed%04d.png' % seed))
-            progress.step()
+            path = os.path.join(args.output, 'original', '%s.png' % args.tokenid)
+            img.save(path)
+            print('saved', path)
 
-    progress.write('Done!', step=False)
-    progress.close()
+            for d in [32, 64, 128]:
+                rimg = img.resize((d, d))
+                path = os.path.join(args.output, str(d), '%s.png' % args.tokenid)
+                rimg.save(path)
+                print('saved', path)
 
 #----------------------------------------------------------------------------
+
+
+args = get_arg_parser()
+args.network = './checkpoint/Gs.pth'
+args.output = './results'
+args.command = 'generate_images'
+args.pixel_min = -1.0
+args.pixel_max = 1.0
+args.gpu = [] # use cpu
+args.batch_size = 1
+args.truncation_psi = 0.7
+
+G = stylegan2.models.load(args.network)
+G.eval()
+
+assert os.path.isdir(args.output) or not os.path.splitext(args.output)[-1], \
+    '--output argument should specify a directory, not a file.'
+if not os.path.exists(args.output):
+    os.makedirs(args.output)
+for d in ['32', '64', '128', 'original']:
+    if not os.path.exists(os.path.join(args.output, d)):
+        os.makedirs(os.path.join(args.output, d))
+assert isinstance(G, stylegan2.models.Generator), 'Model type has to be ' + \
+    'stylegan2.models.Generator. Found {}.'.format(type(G))
+
 
 def main():
     args = get_arg_parser().parse_args()
     assert args.command, 'Missing subcommand.'
-    assert os.path.isdir(args.output) or not os.path.splitext(args.output)[-1], \
-        '--output argument should specify a directory, not a file.'
-    if not os.path.exists(args.output):
-        os.makedirs(args.output)
-
     G = stylegan2.models.load(args.network)
     G.eval()
 
@@ -357,5 +382,35 @@ def main():
 
 #----------------------------------------------------------------------------
 
-if __name__ == '__main__':
-    main()
+app = Flask(__name__)
+
+
+def load_icon(tokenid, sdir):
+    global args
+    tokenid_regex = re.compile('^[0-9a-f]{64}$')
+    if not tokenid_regex.match(tokenid):
+        return 'bad tokenid', 400
+    args.tokenid = tokenid
+
+    path = os.path.join(args.output, sdir, '%s.png' % args.tokenid)
+    if not os.path.exists(path):
+        print(path + ' not exist')
+        generate_images(G, args)
+
+    return send_file(path, mimetype='image/png')
+
+@app.route('/original/<tokenid>.png')
+def icon_original(tokenid):
+    return load_icon(tokenid, 'original')
+
+@app.route('/32/<tokenid>.png')
+def icon_32(tokenid):
+    return load_icon(tokenid, '32')
+
+@app.route('/64/<tokenid>.png')
+def icon_64(tokenid):
+    return load_icon(tokenid, '64')
+
+@app.route('/128/<tokenid>.png')
+def icon_128(tokenid):
+    return load_icon(tokenid, '128')
