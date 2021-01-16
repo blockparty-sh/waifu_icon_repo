@@ -340,29 +340,6 @@ def generate_images(G, args):
 #----------------------------------------------------------------------------
 
 
-args = get_arg_parser()
-args.network = './checkpoint/Gs.pth'
-args.output = './results'
-args.command = 'generate_images'
-args.pixel_min = -1.0
-args.pixel_max = 1.0
-args.gpu = [] # use cpu
-args.batch_size = 1
-args.truncation_psi = 0.7
-
-G = stylegan2.models.load(args.network)
-G.eval()
-
-assert os.path.isdir(args.output) or not os.path.splitext(args.output)[-1], \
-    '--output argument should specify a directory, not a file.'
-if not os.path.exists(args.output):
-    os.makedirs(args.output)
-for d in ['32', '64', '128', 'original']:
-    if not os.path.exists(os.path.join(args.output, d)):
-        os.makedirs(os.path.join(args.output, d))
-assert isinstance(G, stylegan2.models.Generator), 'Model type has to be ' + \
-    'stylegan2.models.Generator. Found {}.'.format(type(G))
-
 
 def main():
     args = get_arg_parser().parse_args()
@@ -384,18 +361,42 @@ def main():
 
 app = Flask(__name__)
 
+G = stylegan2.models.load('./checkpoint/Gs.pth')
+G.eval()
 
 def load_icon(tokenid, sdir):
-    global args
+    args = get_arg_parser()
+    args.network = './checkpoint/Gs.pth'
+    args.output = './results'
+    args.command = 'generate_images'
+    args.pixel_min = -1.0
+    args.pixel_max = 1.0
+    args.gpu = [] # use cpu
+    args.batch_size = 1
+    args.truncation_psi = 0.7
+
+
+    assert os.path.isdir(args.output) or not os.path.splitext(args.output)[-1], \
+        '--output argument should specify a directory, not a file.'
+    if not os.path.exists(args.output):
+        os.makedirs(args.output)
+    for d in ['32', '64', '128', 'original']:
+        if not os.path.exists(os.path.join(args.output, d)):
+            os.makedirs(os.path.join(args.output, d))
+    assert isinstance(G, stylegan2.models.Generator), 'Model type has to be ' + \
+        'stylegan2.models.Generator. Found {}.'.format(type(G))
+
+    wargs = args
+
     tokenid_regex = re.compile('^[0-9a-f]{64}$')
     if not tokenid_regex.match(tokenid):
         return 'bad tokenid', 400
-    args.tokenid = tokenid
+    wargs.tokenid = tokenid
 
-    path = os.path.join(args.output, sdir, '%s.png' % args.tokenid)
+    path = os.path.join(args.output, sdir, '%s.png' % wargs.tokenid)
     if not os.path.exists(path):
         print(path + ' not exist')
-        generate_images(G, args)
+        generate_images(G, wargs)
 
     return send_file(path, mimetype='image/png')
 
